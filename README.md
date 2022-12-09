@@ -6,3 +6,5 @@ This package uses a two-step procedure to estimate the conditional average treat
 The CATE estimator implemented in this package not only allows for high-dimensional data, but also has the “double robustness” property: either the model for the propensity score or the models for the conditional means of the potential outcomes are allowed to be misspecified (but not both).
 
 The algorithm used in this package is described in the paper by Fan et al., “Estimation of Conditional Average Treatment Effects With High-Dimensional Data” (2022), Journal of Business & Economic Statistics. (doi:10.1080/07350015.2020.1811102)
+
+This package can be downloaded/installed from CRAN, "hdcate", check CRAN for updates also.
