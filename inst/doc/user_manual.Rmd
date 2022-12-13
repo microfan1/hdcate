@@ -1,0 +1,448 @@
+---
+title: "User Manual: High-Dimensional Conditional Average Treatment Effects Estimation (R Package)"
+output: 
+  rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{User Manual: High-Dimensional Conditional Average Treatment Effects Estimation (R Package)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+
+# save built-in output hook
+hook_output = knitr::knit_hooks$get("output")
+
+# set a new output hook to cut long output texts
+knitr::knit_hooks$set(output = function(x, options) {
+  if (!is.null(n <- options$out.lines)) {
+    x = xfun::split_lines(x)
+    if (length(x) > n) {
+      # cut
+      x = c(head(x, n), '....\n')
+    }
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+```
+
+This package uses a two-step procedure to estimate the conditional average treatment effects (CATE) with potentially high-dimensional covariate(s). In the first stage, the nuisance functions necessary for identifying CATE can be estimated by machine learning methods, allowing the number of covariates to be comparable to or larger than the sample size. The second stage consists of a low-dimensional local linear regression, reducing CATE to a function of the covariate(s) of interest.
+
+The CATE estimator implemented in this package not only allows for high-dimensional data, but also has the “double robustness” property: either the model for the propensity score or the models for the conditional means of the potential outcomes are allowed to be misspecified (but not both).
+
+The algorithm used in this package is described in the paper by Fan et al., "Estimation of Conditional Average Treatment Effects With High-Dimensional Data" (2022), Journal of Business & Economic Statistics. ([doi:10.1080/07350015.2020.1811102](https://doi.org/10.1080/07350015.2020.1811102))
+
+## Installation
+
+Install the package from github:
+
+```{r installation, eval=FALSE}
+install.packages('devtools')
+devtools::install_github('microfan1/hdcate')
+```
+
+## Basic Usage
+
+Load package:
+
+```{r load package}
+library(hdcate)
+```
+
+Define the empirical data (which is a usual `data.frame`), here we use a built-in simulated data:
+
+```{r message=TRUE}
+set.seed(1)  # set an arbitrary random seed to ensure the reproducibility
+data <- HDCATE.get_sim_data(n_obs=500, n_var=100, n_rel_var=4, intercept=10)  # generate data
+```
+The simulated data contains 500 observations, each observation has 100 covariates, only the first 4 of those covariates (`X1`, `X2`, `X3` and `X4`) are actually present in the expectation function of potential outcome, and only the last 4 covariates (`X97`, `X98`, `X99` and `X100`) are present in the propensity score function.
+
+Let's see what the `data` looks like:
+
+```{r data, out.lines=6}
+data
+```
+
+In the data, we know that the dependent variable is `Y`, treatment variable is `D`, and we use a model with the formula of independent variable as:
+
+```{r x_formula}
+x_formula <- "X1+X2+X3+X4+X5+X6"
+x_formula
+```
+
+Note that the propensity score function is misspecified in this example. We shall see the "double robust" shortly.
+
+Then, we can use the `data` to create a model:
+
+```{r model}
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+```
+
+Pass this `model` to an operating function `HDCATE.set_condition_var()` to set the required conditional variable, here we want to know the conditional average treatment effects (CATE) for `X2`, from `X2=-1` to `X2=1`, step by `0.01`:
+
+```{r set conditional variable}
+HDCATE.set_condition_var(model, 'X2', min=-1, max=1, step=0.01)
+```
+
+Then we are ready to fit the model, pass the `model` to the operating function `HDCATE.fit()` to fit the model:
+
+```{r fit}
+HDCATE.fit(model)
+```
+
+After the model fitting, we obtain the resulting average treatment effects (via accesing the `ate` attribute of `model`) and conditional average treatment effects (via accesing the `hdcate` attribute of `model`):
+
+```{r get fitted ATE}
+# ATE
+model$ate
+```
+
+```{r get fitted CATE, out.lines=6}
+# CATE
+model$hdcate
+```
+
+After fitting, we may want to know the uniform confidence bands, to achieve this, pass the fitted `model` to the operating function `HDCATE.inference()`:
+
+```{r inferences}
+HDCATE.inference(model)
+```
+
+Then we obtain the uniform confidence bands for 2-sided test, left-sided test and right-sided test by accessing the `i_two_side`, `i_left_side` and `i_right_side` attributes of the `model`, respectively:
+
+```{r two-sided test, out.lines=6}
+# two-sided bands
+model$i_two_side
+```
+
+```{r left-sided test, out.lines=6}
+# left-sided bands
+model$i_left_side
+```
+
+```{r right-sided test, out.lines=6}
+# right-sided bands
+model$i_right_side
+```
+
+Finally, we may want a plot for the estimated results above:
+```{r plot, fig.show='hold' , fig.width=6, fig.height=6, fig.align='center', fig.cap='HDCATE Estimation (propensity function is misspecified)', dpi=200, out.width="80%"}
+HDCATE.plot(model)
+
+# Alternatively, if the model is not inferenced, use the code below:
+# HDCATE.plot(model, include_band=FALSE)
+
+# Alternatively, we may want to save the full plot as a high-definition PDF file:
+# HDCATE.plot(model, output_pdf=TRUE, pdf_name='hdcate_plot.pdf', 
+#   include_band=TRUE, test_side='both', y_axis_min='auto', y_axis_max='auto',
+#   display.hdcate='HDCATEF', display.ate='ATE', display.siglevel='sig_level'
+# )
+```
+
+From the graph above, although the model we use is misspecified for the propensity score function (we used  the formula `Y~X1+X2+X3+X4+X5+X6`), we still obtain a robust result, which is very close to the actual CATE function (`CATE(X2)=10+X2`). If we use a model that is misspecified for the expectation function of potential outcome, the results are also robust:
+
+```{r change formula, fig.show='hold' , fig.width=6, fig.height=6, fig.align='center', fig.cap='HDCATE Estimation (expectation function is misspecified)', dpi=200, out.width="80%"}
+x_formula = paste(paste0('X', c(90:100)), collapse ='+')  # x_formula="X90+...+X100"
+
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+
+HDCATE.set_condition_var(model, 'X2', min=-1, max=1, step=0.01)
+HDCATE.fit(model)
+HDCATE.inference(model)
+HDCATE.plot(model)
+```
+
+The results above show the "double robust" property of the estimating approach in this package, see [Fan et al. (2022)](https://doi.org/10.1080/07350015.2020.1811102) for more theoretical results.
+
+## Advanced Usage
+
+### Full-sample Estimator vs Cross-fitting Estimator
+
+By default, when creating an HDCATE model, this package uses full-sample approach, but you are also very welcome to use the cross-fitting approach described in [Fan et al. (2022)](https://doi.org/10.1080/07350015.2020.1811102), by simply pass `model` into the operator `HDCATE.use_cross_fitting()` right after the HDCATE `model` has been created, that is:
+
+```{r cross-fitting}
+# create the model first, or use an existing `model` and skip this line
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+
+# suppose we want to use the 5-fold cross-fitting approach:
+HDCATE.use_cross_fitting(model, k_fold=5)
+```
+
+You may also want to set the folds manually, in this case, pass a list of index vector to the third argument of the operator:
+
+```{r manual fold}
+# In this case, the param k_fold is auto detected, you can pass any value to it.
+HDCATE.use_cross_fitting(model, k_fold=1, folds=list(c(1:250), c(251:500)))
+```
+
+If we wants to use full-sample approach again, then we can use anothor operator `HDCATE.use_full_sample()`.
+
+```{r change to full sample}
+HDCATE.use_full_sample(model)
+```
+
+### User-defined Machine Learning Approach
+
+By default, the package uses LASSO on the first stage (i.e. the estimation of the treated/untreated expectation functions and propensity  score functions), but it is highly (and easily) extendable.
+
+Researchers are welcome to define their own preferred methods (such as other ML methods) to run the first-stage estimation.
+
+To define your own approach, you should define several functions that describe how you fit and predict the input data, and then pass those functions (and the `model` object) to the operator `HDCATE.set_first_stage()`. Then the package will use your method on the first stage.
+
+The template of those functions are given as follows:
+
+```{r temp function}
+my_method_to_fit_expectation <- function(df) {
+  # fit the input data.frame (df), where the first column is outcome value (Y)
+  #   and the rest are covariates in x_formula
+  # ...
+  # return a fitted object
+}
+my_method_to_predict_expectation <- function(fitted_model, df) {
+  # use the fitted object (returned by your function above) to predict the conditional expectation
+  #   fucntion on the input data.frame (df)
+  # ...
+  # return a vector of predicted values
+}
+my_method_to_fit_propensity <- function(df) {
+  # fit the input data.frame (df), where the first column is dummy treatment 
+  #   value (D) and the rest are covariates in x_formula
+  # ...
+  # return a fitted object
+}
+my_method_to_predict_propensity <- function(fitted_model, df) {
+  # use the fitted object (returned by your function above) to predict the propensity score 
+  #   fucntion on the input data.frame (df)
+  # ...
+  # return a vector of predicted values
+}
+```
+
+**Example 1 (LASSO)**: the default ML method in `HDCATE.fit` is LASSO, users can manually define a ML method using the above template, and we again use LASSO as an example, similar practice applies for other ML methods:
+
+> Note: In practice, LASSO is the built-in method in the package, if you just want to use LASSO, there's no need to do the following.
+
+```{r lasso example}
+x_formula <- "X1+X2+X3+X4+X5+X6"  # propensity function is misspecified
+# create a model
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+
+# using the template above, we can write:
+my_method_to_fit_expectation <- function(df) {
+  # fit the input data.frame (df), where the first column is outcome value (Y)
+  #   and the rest are covariates in x_formula
+  hdm::rlasso(as.formula(paste0('Y', "~", x_formula)), df)
+  # return a fitted object
+}
+my_method_to_predict_expectation <- function(fitted_model, df) {
+  # use the fitted object (fitted_model) to predict the conditional expectation
+  #   fucntion on the input data.frame (df)
+  predict(fitted_model, df)
+  # return a vector of predicted values
+}
+my_method_to_fit_propensity <- function(df) {
+  # fit the input data.frame (df), where the first column is dummy treatment 
+  #   variable (D) and the rest are covariates in x_formula
+  hdm::rlassologit(as.formula(paste0('D', "~", x_formula)), df)
+  # return a fitted object
+}
+my_method_to_predict_propensity <- function(fitted_model, df) {
+  # use the fitted object (fitted_model) to predict the propensity score 
+  #   fucntion on the input data.frame (df)
+  predict(fitted_model, df, type="response")
+  # return a vector of predicted values
+}
+```
+
+After defining these functions, we can easily plug them into the package using operator `HDCATE.set_first_stage()`:
+
+```{r reset1, include=FALSE}
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+```
+
+```{r plug in}
+HDCATE.set_first_stage(
+  model,
+  fit.treated=my_method_to_fit_expectation,
+  fit.untreated=my_method_to_fit_expectation,
+  fit.propensity=my_method_to_fit_propensity,
+  predict.treated=my_method_to_predict_expectation,
+  predict.untreated=my_method_to_predict_expectation,
+  predict.propensity=my_method_to_predict_propensity
+)
+```
+
+And then we can use the user-defined first-stage ML methods to estimate CATE:
+
+```{r re estimate 1, fig.show='hold' , fig.width=6, fig.height=6, fig.align='center', fig.cap='HDCATE Estimation (using user-defined LASSO on the first stage)', dpi=200, out.width="80%"}
+HDCATE.set_condition_var(model, 'X2', min=-1, max=1, step=0.01)
+HDCATE.fit(model)
+HDCATE.inference(model)
+HDCATE.plot(model)
+```
+
+We shall see the similar result, since the user-defined method in this example is the same as the built-in method (LASSO).
+
+To clear the user-defined first-stage method and return to the default built-in method, simply call:
+
+```{r recover}
+HDCATE.unset_first_stage(model)
+```
+
+**Example 2 (Random Forest)**: Here we provide an additional example for another popular ML method: Random Forest, to further show how users can easily plug their own ML methods into this package:
+
+```{r reset before rf, include=FALSE}
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+```
+
+```{r ramdom forest example, fig.show='hold' , fig.width=6, fig.height=6, fig.align='center', fig.cap='HDCATE Estimation (using user-defined Random Forest model on the first stage)', dpi=200, out.width="80%"}
+# propensity function is misspecified, for example
+x_formula <- "X1+X2+X3+X4+X5+X6"
+# create a model
+model <- HDCATE(data=data, y_name='Y', d_name='D', x_formula=x_formula)
+
+# =========== User-defined ML approach start ===========
+
+# using the template above, we can write:
+my_method_to_fit_expectation <- function(df) {
+  # fit the input data.frame (df), where the first column is outcome value (Y)
+  #   and the rest are covariates in x_formula
+  randomForest::randomForest(as.formula(paste0('Y', "~", x_formula)), data = df)
+  # return a fitted object
+}
+my_method_to_predict_expectation <- function(fitted_model, df) {
+  # use the fitted object (fitted_model) to predict the conditional expectation
+  #   fucntion on the input data.frame (df)
+  predict(fitted_model, df)
+  # return a vector of predicted values
+}
+my_method_to_fit_propensity <- function(df) {
+  # fit the input data.frame (df), where the first column is dummy treatment 
+  #   variable (D) and the rest are covariates in x_formula
+  randomForest::randomForest(as.formula(paste0('D', "~", x_formula)), data = df)
+  # return a fitted object
+}
+my_method_to_predict_propensity <- function(fitted_model, df) {
+  # use the fitted object (fitted_model) to predict the propensity score 
+  #   fucntion on the input data.frame (df)
+  predict(fitted_model, df)
+  # return a vector of predicted values
+}
+
+HDCATE.set_first_stage(
+  model,
+  fit.treated=my_method_to_fit_expectation,
+  fit.untreated=my_method_to_fit_expectation,
+  fit.propensity=my_method_to_fit_propensity,
+  predict.treated=my_method_to_predict_expectation,
+  predict.untreated=my_method_to_predict_expectation,
+  predict.propensity=my_method_to_predict_propensity
+)
+
+# =========== User-defined ML approach end ===========
+
+# set conditional variable in CATE, same as above
+HDCATE.set_condition_var(model, 'X2', min=-1, max=1, step=0.01)
+
+# fit, inference and plot
+HDCATE.fit(model)
+HDCATE.inference(model)
+HDCATE.plot(model)
+```
+
+As shown above, after applying user-defined Random Forest approach into this package, the CATE estimation result seems even better than that using LASSO in respect of confidence bands.
+
+Futhermore, users may want to extract the fitted ML model for analysis, this can be achieved by accessing the `propensity_score_model_list`, `untreated_cond_exp_model_list` and `treated_cond_exp_model_list` attributes of the `model` object for the fitted propensity score model, fitted conditional expectation model (for untreated) and fitted conditional expectation model (for treated), respectively. The value of these attributes are "List of `K`", where `K` is the number of folds, `K=1` when using the default full-sample estimator.
+
+For example, we may want to calculate the variable importance in fitting  treated conditional expectations using the fitted random forest model:
+
+```{r var importance in rf, fig.show='hold' , fig.width=6, fig.height=6, fig.align='center', fig.cap='Variable Importance Extracted from the User-defined Random Forest Model'}
+# the list have only one element since we use full-sample estimator
+rf_model <- model$treated_cond_exp_model_list[[1]]
+
+# then, we can use the fitted object `rf_model` for futher analysis.
+# the rest of codes are omitted since they are unconcerned for this package.
+# ...
+```
+
+```{r plot rf, echo=FALSE, fig.align='center', fig.cap='Variable Importance Extracted from the User-defined Random Forest Model', fig.height=6, fig.width=6, dpi=200, fig.show='hold', out.width="80%"}
+# the code below uses randomForest and ggplot2 to plot out variable importance
+library('ggplot2') # visualization
+library('ggthemes') # visualization
+library('dplyr') # data manipulation
+importance    <- randomForest::importance(rf_model)
+# varImportance <- data.frame(Variables = row.names(importance), Importance = round(importance[ ,'MeanDecreaseGini'],2))  # for classification problem
+varImportance <- data.frame(Variables = row.names(importance), Importance = round(importance[ ,'IncNodePurity'],2))  # for regression problem
+
+rankImportance <- varImportance %>%
+  mutate(Rank = paste0('#',dense_rank(desc(Importance))))
+
+ggplot(rankImportance, aes(x = reorder(Variables, Importance), 
+    y = Importance, fill = Importance)) +
+  geom_bar(stat='identity') + 
+  # geom_text(aes(x = Variables, y = 0.5, label = Rank),
+  #   hjust=0, vjust=0.55, size = 4, colour = 'red') +
+  labs(x = 'Variables', y= 'Importance (measured in squared OOB residuals)') +
+  coord_flip() + 
+  theme_few()
+```
+
+We can see that in this example, the powerful random forest model captures the actual relevant variable of conditional expectation functions of potential outcome (i.e. `X1`, `X2`, `X3` and `X4`) correctly. 
+
+Similar practice applies for other ML methods.
+
+### User-defined Inference Options
+
+Users can define their own inference procedure by passing the following arguments into `HDCATE.inference()`:
+
+* `sig_level`: set significant level of the confidence bands, the default is 0.01, passing a vector of significant levels is also allowed.
+* `n_rep_boot`: set the number of bootstrap replications, the default is 1000.
+
+For example, we may want to construct uniform confidence bands with a larger number of bootstrap replications=3000, and use another significant level=5%:
+
+```{r user-defined inf}
+HDCATE.inference(model, sig_level=0.05, n_rep_boot=3000)
+```
+
+### User-defined Bandwidth
+
+On the second stage, we use rule-of-thumb to decide the bandwidth in the local linear regression, the bandwidth can also be manually set before calling `HDCATE.fit()`:
+
+```{r bw}
+HDCATE.set_bw(model, 0.15)  # for example, set bandwidth=0.15
+```
+
+To reset to default rule-of-thumb approach, call:
+
+```{r recover bw}
+HDCATE.set_bw(model)
+```
+
+## Other Details
+
+Other details for using this package can be found on the detailed package documentation or the help files below:
+
+```{r help, eval=FALSE}
+help(HDCATE)
+help(HDCATE.set_condition_var)
+help(HDCATE.fit)
+help(HDCATE.inference)
+help(HDCATE.plot)
+help(HDCATE.use_cross_fitting)
+help(HDCATE.use_full_sample)
+help(HDCATE.set_first_stage)
+help(HDCATE.unset_first_stage)
+help(HDCATE.set_bw)
+```
+
+## References
+
+Qingliang Fan, Yu-Chin Hsu, Robert P. Lieli & Yichong Zhang (2022) Estimation of Conditional Average Treatment Effects With High-Dimensional Data, Journal of Business & Economic Statistics, 40:1, 313-327, DOI: [10.1080/07350015.2020.1811102](https://doi.org/10.1080/07350015.2020.1811102)
+

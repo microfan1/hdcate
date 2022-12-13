@@ -4,10 +4,12 @@
 \alias{HDCATE.fit}
 \title{Fit the HDCATE function}
 \usage{
-HDCATE.fit(HDCATE_model)
+HDCATE.fit(HDCATE_model, verbose = TRUE)
 }
 \arguments{
 \item{HDCATE_model}{an object created via \link{HDCATE}}
+
+\item{verbose}{whether the verbose message is displayed, the default is \code{TRUE}}
 }
 \value{
 None. The \code{HDCATE_model} is fitted.

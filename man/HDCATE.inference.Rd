@@ -4,14 +4,21 @@
 \alias{HDCATE.inference}
 \title{Construct uniform confidence bands}
 \usage{
-HDCATE.inference(HDCATE_model, sig_level = 0.01, n_rep_boot = 1000)
+HDCATE.inference(
+  HDCATE_model,
+  sig_level = 0.01,
+  n_rep_boot = 1000,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{HDCATE_model}{an object created via \link{HDCATE}}
 
 \item{sig_level}{a (vector of) significant level, such as 0.01, or c(0.01, 0.05, 0.10)}
 
-\item{n_rep_boot}{repeat n times for bootstrap, the default is 1000.}
+\item{n_rep_boot}{repeat n times for bootstrap, the default is 1000}
+
+\item{verbose}{whether the verbose message is displayed, the default is \code{FALSE}}
 }
 \value{
 None. The HDCATE confidence bands are constructed.

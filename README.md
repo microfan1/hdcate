@@ -16,5 +16,5 @@ User manual is provided at <https://microfan1.github.io/hdcate/>
 ## Installation (Github Version)
 
 ```R
-devtools::install_github('microfan1/hdcate', build_vignettes = TRUE)
+devtools::install_github('microfan1/hdcate')
 ```

@@ -67,13 +67,13 @@ HDCATE_R6Class <- R6Class(
       self$local_weight <- rep(1, nrow(data))
       self$n_obs = nrow(data)
     },
-    propensity_hd_estimate = function(data=NA) {
+    propensity_hd_estimate = function(data=NA, verbose=F) {
       data <- private$check_data(data)
       method <- self$propensity_est_method
       d_name <- self$d_name
       x_formula <- self$x_formula
 
-      print(paste0('Start estimating model for propensity score, method=', method))
+      if (verbose) {message(paste0('Start estimating model for propensity score, method=', method))}
 
       if (!self$user_defined_first_stage){
         if (method == "lasso") {
@@ -85,18 +85,18 @@ HDCATE_R6Class <- R6Class(
         model <- self$user_defined_fit_ps(model.frame(as.formula(paste0(d_name, "~", x_formula)), data))
       }
 
-      print(paste0('Finish estimating propensity score.'))
+      if (verbose) {message(paste0('Finish estimating propensity score.'))}
 
       self$propensity_score_model_list <- append(self$propensity_score_model_list, list(model))
       return(model)
     },
-    conditional_expectations_hd_estimate = function(data=NA) {
+    conditional_expectations_hd_estimate = function(data=NA, verbose=F) {
       data <- private$check_data(data)
       method <- self$expectation_est_method
       y_name <- self$y_name
       x_formula <- self$x_formula
 
-      print(paste0('Start estimating conditional expectations, method=', method))
+      if (verbose) {message(paste0('Start estimating conditional expectations, method=', method))}
       filter_treated<-data[,self$d_name]==1
       filter_untreated<-data[,self$d_name]==0
 
@@ -114,30 +114,31 @@ HDCATE_R6Class <- R6Class(
         model_treated<-self$user_defined_fit_treated(model.frame(as.formula(paste0(y_name, "~", x_formula)), data[filter_treated,]))
       }
 
-      print(paste0('Finish estimating conditional expectations.'))
+      if (verbose) {message(paste0('Finish estimating conditional expectations.'))}
+
 
       self$untreated_cond_exp_model_list <- append(self$untreated_cond_exp_model_list, list(model_untreated))
       self$treated_cond_exp_model_list <- append(self$treated_cond_exp_model_list, list(model_treated))
 
       return(list(predictor_untreated=model_untreated, predictor_treated=model_treated))
     },
-    first_stage = function(data=NA) {
+    first_stage = function(data=NA, verbose=F) {
       data <- private$check_data(data)
-      predictor_propensity <- list(predictor_propensity=self$propensity_hd_estimate(data))
-      predictor_cond_expectations <- self$conditional_expectations_hd_estimate(data)
+      predictor_propensity <- list(predictor_propensity=self$propensity_hd_estimate(data, verbose=verbose))
+      predictor_cond_expectations <- self$conditional_expectations_hd_estimate(data, verbose=verbose)
       predictor_eta_hat <- append(predictor_cond_expectations, predictor_propensity)
       return(predictor_eta_hat)
     },
-    second_stage = function(predictor_eta_hat=NA, eta_hat=NA, subsample_idx=NULL, local_weight=NULL, estimate_std=TRUE, quietly=FALSE, save_model=TRUE) {
+    second_stage = function(predictor_eta_hat=NA, eta_hat=NA, subsample_idx=NULL, local_weight=NULL, estimate_std=TRUE, verbose=FALSE, save_model=TRUE) {
       y_name <- self$y_name
       d_name <- self$d_name
       x_formula <- self$x_formula
 
-      if (!quietly) {
+      if (verbose) {
         if (self$use_cross_fitting) {
-          print(paste0('Start estimating HDCATE for a fold.'))
+          message(paste0('Start estimating HDCATE in a fold.'))
         } else {
-          print(paste0('Start estimating HDCATE.'))
+          message(paste0('Start estimating HDCATE.'))
         }
       }
 
@@ -198,13 +199,13 @@ HDCATE_R6Class <- R6Class(
       # get HDCATE estimator, i,e. tau_hat in the paper
       hdcate <- model$beta0
 
-      if (!quietly) {
-        print(paste0('Finish estimating HDCATE.'))
+      if (verbose) {
+        message(paste0('Finish estimating HDCATE.'))
       }
 
       if (estimate_std) {
-        if (!quietly) {
-          print(paste0('Start estimating standard errors.'))
+        if (verbose) {
+          message(paste0('Start estimating standard errors.'))
         }
 
         length_grid <- self$length_grid
@@ -218,8 +219,8 @@ HDCATE_R6Class <- R6Class(
         }
         sigma_hat <- sqrt(sigmasq_hat)
 
-        if (!quietly) {
-          print(paste0('Finish estimating standard errors.'))
+        if (verbose) {
+          message(paste0('Finish estimating standard errors.'))
         }
       } else {
         sigma_hat <- NULL
@@ -264,15 +265,15 @@ HDCATE_R6Class <- R6Class(
     #' @description Fit the HDCATE function
     #'
     #' @return estimated HDCATE
-    fit = function(){
+    fit = function(verbose=FALSE){
       if (!self$use_cross_fitting){
         # Full-sample estimator
-        print(paste0('Use full-sample estimator.'))
+        message(paste0('Use full-sample estimator.'))
         # First stage
-        predictor_eta_hat <- self$first_stage()
+        predictor_eta_hat <- self$first_stage(verbose=verbose)
         # return(predictor_eta_hat)
         # Second stage
-        res_second_stage <- self$second_stage(predictor_eta_hat=predictor_eta_hat)
+        res_second_stage <- self$second_stage(predictor_eta_hat=predictor_eta_hat, verbose=verbose)
 
         self$hdcate <- res_second_stage$hdcate
         self$ate <- res_second_stage$ate
@@ -280,11 +281,9 @@ HDCATE_R6Class <- R6Class(
         self$sigma_hat <- res_second_stage$sigma_hat
         self$eta_hat_list <- list(full_sample=res_second_stage$eta_hat)
       } else {
-        cat(self$k_fold)
-        cat(is.numeric(self$k_fold) && (self$k_fold %% 1 == 0) && (self$k_fold >= 2))
         if (is.numeric(self$k_fold) && (self$k_fold %% 1 == 0) && (self$k_fold >= 2)) {
           # K-fold cross-fitting estimator
-          print(paste0('Use ', self$k_fold, '-fold cross-fitting estimator.'))
+          message(paste0('Use ', self$k_fold, '-fold cross-fitting estimator.'))
           if (is.null(self$folds) || anyNA(self$folds)) {
             self$folds <- caret::createFolds(self$data[, self$y_name], k=self$k_fold)
           }
@@ -293,11 +292,12 @@ HDCATE_R6Class <- R6Class(
             function(idx) {
               data_kc <- self$data[-idx, ]
               # First stage
-              predictor_eta_hat_kc <- self$first_stage(data=data_kc)
+              predictor_eta_hat_kc <- self$first_stage(data=data_kc, verbose=verbose)
               # Second stage
               res <- self$second_stage(
                 predictor_eta_hat=predictor_eta_hat_kc,
-                subsample_idx=idx
+                subsample_idx=idx,
+                verbose=verbose
               )
               return(res)
             }
@@ -314,9 +314,9 @@ HDCATE_R6Class <- R6Class(
         # return(list(cv_res=cv_res))
       }
     },
-    inference = function(sig_level=0.01, boot_method='normal', n_rep_boot=1000){
+    inference = function(sig_level=0.01, boot_method='normal', n_rep_boot=1000, verbose=FALSE){
       # uniform confidence bands
-      print(paste0('Constructing uniform confidence bands...'))
+      message(paste0('Constructing uniform confidence bands...'))
 
       # validation
       v1 <- !(is.null(self$hdcate) || anyNA(self$hdcate))
@@ -339,7 +339,7 @@ HDCATE_R6Class <- R6Class(
             subsample_idx=NULL,
             estimate_std=FALSE,
             local_weight=weights[,b],
-            quietly=TRUE,
+            verbose=verbose,
             save_model=FALSE
           )
           hdcate_boot <- boot_loc_res$hdcate
@@ -351,7 +351,7 @@ HDCATE_R6Class <- R6Class(
                 subsample_idx=idx,
                 estimate_std=FALSE,
                 local_weight=weights[idx,b],
-                quietly=TRUE,
+                verbose=verbose,
                 save_model=FALSE
               )
               return(boot_loc_res)
@@ -395,7 +395,7 @@ HDCATE_R6Class <- R6Class(
       self$i_two_side <- i_two_side
       self$i_left_side <- i_left_side
       self$i_right_side <- i_right_side
-      print(paste0('Uniform confidence bands are constructed.'))
+      message(paste0('Uniform confidence bands are constructed.'))
       # res <- list(i_two_side, i_left_side, i_right_side, hdcate, vate)
       # return(list(cv_res=cv_res))
     },
@@ -432,6 +432,10 @@ HDCATE_R6Class <- R6Class(
       if (y_axis_max=='auto'){
         yupper <- max_value + distance * 0.25
       }
+
+      # reset user's settings when the function is exited
+      oldpar <- par(no.readonly = TRUE)
+      on.exit(par(oldpar))
 
       # plot and save
       if (output_pdf) {
@@ -525,12 +529,12 @@ HDCATE_R6Class <- R6Class(
       # step=0.01 by default (defined in hdcate R6 class)
       v4 <- (!(is.null(self$cond_var_eval_step) || anyNA(self$cond_var_eval_step)))
       if (!(v1 && v2 && v3)) {
-        print(paste0('Failed to update conditional variable to: name=', name, ', min=', min, ', max=', max, ', step=', step, '.'))
+        warning(paste0('Failed to update conditional variable to: name=', name, ', min=', min, ', max=', max, ', step=', step, '.'))
         stop('Missing some of these params for the conditional variable: `name`, `min` and `max`.')
       } else {
         self$cond_interval <- seq(self$cond_var_lower, self$cond_var_upper, self$cond_var_eval_step)
         self$length_grid <- length(self$cond_interval)
-        print(paste0('Updated conditional variable to: name=', name, ', min=', min, ', max=', max, ', step=', step, '.'))
+        message(paste0('Updated conditional variable to: name=', name, ', min=', min, ', max=', max, ', step=', step, '.'))
       }
     }
   ),
