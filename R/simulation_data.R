@@ -25,6 +25,6 @@ HDCATE.get_sim_data <- function(n_obs=500, n_var=100, n_rel_var=4,
   D <- ifelse(p>u, 1, 0)
   y1 <- intercept + rowSums(X[, 1:n_rel_var]) * sig_strength_outcome + epsilon
   Y <- D*y1
-  print(paste0('Actual CATE function is: CATE(x)=', intercept, '+', sig_strength_outcome, '*x'))
+  message(paste0('Actual CATE function is: CATE(x)=', intercept, '+', sig_strength_outcome, '*x'))
   data.frame(Y,D,X)
 }

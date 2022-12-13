@@ -93,6 +93,7 @@ HDCATE.set_condition_var <- function(HDCATE_model, name=NA, min=NA, max=NA, step
 #' Fit the HDCATE function
 #'
 #' @param HDCATE_model an object created via [HDCATE]
+#' @param verbose whether the verbose message is displayed, the default is `TRUE`
 #'
 #' @return None. The `HDCATE_model` is fitted.
 #' @export
@@ -116,15 +117,16 @@ HDCATE.set_condition_var <- function(HDCATE_model, name=NA, min=NA, max=NA, step
 #' \donttest{
 #' HDCATE.fit(model)
 #' }
-HDCATE.fit <- function(HDCATE_model) {
-  HDCATE_model$fit()
+HDCATE.fit <- function(HDCATE_model, verbose=TRUE) {
+  HDCATE_model$fit(verbose=verbose)
 }
 
 #' Construct uniform confidence bands
 #'
 #' @param HDCATE_model an object created via [HDCATE]
 #' @param sig_level a (vector of) significant level, such as 0.01, or c(0.01, 0.05, 0.10)
-#' @param n_rep_boot repeat n times for bootstrap, the default is 1000.
+#' @param n_rep_boot repeat n times for bootstrap, the default is 1000
+#' @param verbose whether the verbose message is displayed, the default is `FALSE`
 #'
 #' @return None. The HDCATE confidence bands are constructed.
 #' @export
@@ -149,8 +151,8 @@ HDCATE.fit <- function(HDCATE_model) {
 #' HDCATE.fit(model)
 #' HDCATE.inference(model)
 #' }
-HDCATE.inference <- function(HDCATE_model, sig_level=0.01, n_rep_boot=1000) {
-  HDCATE_model$inference(sig_level=sig_level, boot_method='normal', n_rep_boot=n_rep_boot)
+HDCATE.inference <- function(HDCATE_model, sig_level=0.01, n_rep_boot=1000, verbose=FALSE) {
+  HDCATE_model$inference(sig_level=sig_level, boot_method='normal', n_rep_boot=n_rep_boot, verbose=verbose)
 }
 
 #' Plot HDCATE function and the uniform confidence bands
